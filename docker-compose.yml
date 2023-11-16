@@ -2,16 +2,15 @@ version: '3.5'
 
 volumes:
   logs:
-  db_data:
+  iam_mysql_data:
   trust:
 
 services:
 
   db:
-    image: ${DB_IMAGE}
-      #volumes:
-      # - db_data:/var/lib/mysql
-
+    image: mysql:5.7
+    volumes:
+     - iam_mysql_data:/var/lib/mysql
     # The setting below enables custom configuration
     # that turns on the MySQL query log
     #   - ./compose/mariadb:/etc/mysql/conf.d
@@ -31,41 +30,97 @@ services:
     command: /bin/true
     volumes:
       - trust:/etc/grid-security/certificates
+    environment:
+      FORCE_TRUST_ANCHORS_UPDATE: 1
+
 
   redis:
     image: redis:6-alpine
     ports:
       - "6379:6379"
 
+  iam-mail-server:
+    image: mailhog/mailhog
+    container_name: mailhog-smtp
+    ports:
+      - "1025:1025"
+      - "8025:8025"
   iam-be:
     container_name: iam-be
-    build:
-      context: .
-      dockerfile: ./iam-login-service/docker/Dockerfile
+#    image: indigoiam/iam-login-service
+    image: basbs/iam-login-service
+#    build:
+#      context: .
+#      dockerfile: ./iam-login-service/docker/Dockerfile
 
     environment:
       TZ: Europe/Rome
-      IAM_JAVA_OPTS: -Djava.security.egd=file:/dev/./urandom -Xdebug -Xrunjdwp:server=y,transport=dt_socket,suspend=n,address=1044 -Dspring.profiles.active=mysql-test -debug
+      IAM_JAVA_OPTS: -Djava.security.egd=file:/dev/./urandom -Xdebug -Xrunjdwp:server=y,transport=dt_socket,suspend=n,address=1044 -Dspring.profiles.active=prod -debug
       IAM_JAR: /code/iam-login-service/target/iam-login-service.war
       IAM_HOST: iam.local.io
       IAM_BASE_URL: https://iam.local.io
       IAM_ISSUER: https://iam.local.io/
       IAM_FORWARD_HEADERS_STRATEGY: native
-      IAM_NOTIFICATION_DISABLE: "true"
-
+#      IAM_NOTIFICATION_DISABLE: "true"
+      IAM_KEY_STORE_LOCATION: "file:///code/keystore.jwks"
       IAM_DB_HOST: db
       IAM_DB_USERNAME: iam
       IAM_DB_PASSWORD: pwd
 
+#      IAM_GOOGLE_CLIENT_ID: ${IAM_GOOGLE_CLIENT_ID}
       IAM_GOOGLE_CLIENT_ID: ${IAM_GOOGLE_CLIENT_ID}
       IAM_GOOGLE_CLIENT_SECRET: ${IAM_GOOGLE_CLIENT_SECRET}
 
-      IAM_IAM_TEST_CLIENT_ID: ${IAM_IAM_TEST_CLIENT_ID}
-      IAM_IAM_TEST_CLIENT_SECRET: ${IAM_IAM_TEST_CLIENT_SECRET}
+      IAM_IAM_TEST_CLIENT_ID: "Mm5NRf2iLfIcA0-1lzG0sc7QiARSR4j5QqSrHgnT7OVoClrFMz3RyiaHT8f7ga0CVoreZYn8HmNEVM3ormBeZQ"
+      IAM_IAM_TEST_CLIENT_SECRET: "426bf95a-d561-41cb-81c9-f21b7ee4dafb"
 
       IAM_JWT_DEFAULT_PROFILE: wlcg
 
-      # IAM_SAML_IDP_METADATA: file:///code/compose/metadata/test-idp.cloud.cnaf.infn.it.metadata.xml 
+      ## SMTP mail server settings
+
+      # SMTP server hostname
+      IAM_MAIL_HOST: mailhog-smtp
+
+      # SMTP server port 
+      IAM_MAIL_PORT: 1025
+
+      # SMTP server username
+      IAM_MAIL_USERNAME:
+
+      # SMTP server password
+      IAM_MAIL_PASSWORD:
+
+      ## IAM notification settings
+
+      # Should the notification server be disabled?
+      # When set to true, notifications are not sent to the mail server (but
+      # printed to the logs)
+      IAM_NOTIFICATION_DISABLE: "false"
+
+      # The email address used as the sender in IAM email notifications
+      IAM_NOTIFICATION_FROM: indigo@localhost
+
+      # The email address used as the recipient in IAM email notifications
+      IAM_NOTIFICATION_ADMIN_ADDRESS: indigo-alerts@localhost
+
+      # Notification policy for account requests. The default value is notify-address
+      # meaning that notifications just arrive to the email address
+      # specified above. Set to notify-admins if you want to notify
+      # all IAM admins or to notify-address-and-admins to combine the two behaviors
+      IAM_NOTIFICATION_ADMIN_NOTIFICATION_POLICY: notify-address
+
+      # Notification policy for group requests. Default value notifies both
+      # admins and group managers. Set to notify-gms if you want to notify only group managers
+      IAM_NOTIFICATION_GROUP_MANAGER_NOTIFICATION_POLICY: notify-gms-and-admins
+
+      # Time interval, in milliseconds, between two consecutive runs of IAM notification 
+      # dispatch task 
+      IAM_NOTIFICATION_TASK_DELAY: 30000
+
+      # Retention of delivered messages, in days
+      IAM_NOTIFICATION_CLEANUP_AGE: 30
+
+      # IAM_SAML_IDP_METADATA: file:///code/compose/metadata/test-idp.cloud.cnaf.infn.it.metadata.xml
       # IAM_SAML_ENTITY_ID: urn:iam:iam-devel
       # IAM_SAML_ENTITY_ID: https://iam.local.io
       
